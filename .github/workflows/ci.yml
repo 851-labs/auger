@@ -14,7 +14,9 @@ jobs:
       - uses: oven-sh/setup-bun@v1
         with:
           bun-version: latest
+        if: matrix.use_docker != true
       - run: bun install
+        if: matrix.use_docker != true
       - run: bun run lint
       - run: bun run typecheck
       - run: bun test
@@ -84,9 +86,10 @@ jobs:
           - os: ubuntu-22.04
             target: bun-linux-x64
             asset: auger-linux-x64.tar.gz
-          - os: ubuntu-24.04-arm64
+          - os: ubuntu-22.04
             target: bun-linux-arm64
             asset: auger-linux-arm64.tar.gz
+            use_docker: true
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v1
@@ -95,6 +98,18 @@ jobs:
       - run: bun install
       - run: mkdir -p packages/cli/dist-bin
       - run: bun build packages/cli/src/index.ts --compile --outfile packages/cli/dist-bin/auger --target ${{ matrix.target }}
+        if: matrix.use_docker != true
+      - uses: docker/setup-qemu-action@v3
+        if: matrix.use_docker == true
+      - uses: docker/setup-buildx-action@v3
+        if: matrix.use_docker == true
+      - name: Build (arm64 via docker)
+        if: matrix.use_docker == true
+        run: |
+          docker run --rm --platform linux/arm64 \
+            -v "$PWD":/work -w /work \
+            oven/bun:latest \
+            sh -lc "bun install && bun build packages/cli/src/index.ts --compile --outfile packages/cli/dist-bin/auger --target ${{ matrix.target }}"
       - run: tar -czf ${{ matrix.asset }} -C packages/cli/dist-bin auger
       - uses: actions/upload-artifact@v4
         with:
