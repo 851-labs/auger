@@ -2,28 +2,78 @@
 
 A lightweight, self-hosted HTTP tunnel. Think ngrok, but yours.
 
-## Install the CLI
+## Use the CLI
 
-Requires Node 20+.
-
-```bash
-npx @851-labs/auger init
-```
-
-Or with Homebrew:
+Install (Homebrew):
 
 ```bash
 brew tap 851-labs/tap
 brew install 851-labs/tap/auger
 ```
 
-## Use the tunnel
+Use (Homebrew):
+
+```bash
+auger init
+auger http 3000
+```
+
+You’ll get a public URL like `https://bright-ember.auger.yourdomain.com` that proxies to `http://127.0.0.1:3000`.
+
+## Other installation options:
+
+Requires Node 20+ for `bunx`, `npx`, and `pnpm dlx`.
+
+<details>
+<summary>bunx</summary>
+
+Install:
+
+```bash
+bunx @851-labs/auger init
+```
+
+Use:
+
+```bash
+bunx @851-labs/auger http 3000
+```
+
+</details>
+
+<details>
+<summary>npx</summary>
+
+Install:
+
+```bash
+npx @851-labs/auger init
+```
+
+Use:
 
 ```bash
 npx @851-labs/auger http 3000
 ```
 
-You’ll get a public URL like `https://bright-ember.auger.yourdomain.com` that proxies to `http://127.0.0.1:3000`.
+</details>
+
+<details>
+<summary>pnpm dlx</summary>
+
+Install:
+
+```bash
+pnpm dlx @851-labs/auger init
+```
+
+Use:
+
+```bash
+pnpm dlx @851-labs/auger http 3000
+```
+
+</details>
 
 ## Deploy the server
 
@@ -41,11 +91,11 @@ primary_region = "iad"
   image = "ghcr.io/851-labs/auger-server:latest"
 
 [env]
-  AUGER_BASE_DOMAIN = "auger.example.com"
+  AUGER_BASE_DOMAIN = "auger.example.com" # <- Set this to your root domain.
   AUGER_HTTP_PORT = "8080"
   AUGER_WS_PATH = "/ws"
   AUGER_DB_PATH = "/data/auger.db"
-  AUGER_TOKENS = "changeme"
+  AUGER_TOKENS = "changeme" # <- Comma-separated auth tokens (use a strong secret).
 
 [[mounts]]
   source = "auger_data"
