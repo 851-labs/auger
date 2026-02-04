@@ -1,6 +1,6 @@
 {
   "name": "@851-labs/auger",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "private": false,
   "type": "module",
   "bin": {
@@ -9,7 +9,8 @@
   "files": [
     "dist"
   ],
-  "dependencies": {
+  "dependencies": {},
+  "devDependencies": {
     "@auger/shared": "workspace:*"
   }
 }
