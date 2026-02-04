@@ -10,6 +10,13 @@ Requires Node 20+.
 npx @851-labs/auger init
 ```
 
+Or with Homebrew:
+
+```bash
+brew tap 851-labs/tap
+brew install 851-labs/tap/auger
+```
+
 ## Use the tunnel
 
 ```bash
