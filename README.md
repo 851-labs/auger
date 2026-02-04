@@ -2,18 +2,16 @@
 
 A lightweight, self-hosted HTTP tunnel. Think ngrok, but yours.
 
-## Install the CLI (from source)
+## Install the CLI
 
 ```bash
-bun install
-bun run build:cli
-./packages/cli/dist/index.js init
+npx @851-labs/auger init
 ```
 
 ## Use the tunnel
 
 ```bash
-auger http 3000
+npx @851-labs/auger http 3000
 ```
 
 You’ll get a public URL like `https://bright-ember.auger.yourdomain.com` that proxies to `http://127.0.0.1:3000`.
@@ -29,7 +27,9 @@ This example pulls the latest published image from GitHub Container Registry.
 # fly.toml
 app = "auger"
 primary_region = "iad"
-image = "ghcr.io/851-labs/auger-server:latest"
+
+[build]
+  image = "ghcr.io/851-labs/auger-server:latest"
 
 [env]
   AUGER_BASE_DOMAIN = "auger.example.com"
