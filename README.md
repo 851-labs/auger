@@ -1,6 +1,22 @@
-# Auger
+<div align="center">
+  <img width="160" height="160" src="assets/icon.png" alt="Auger icon">
+  <h1>Auger</h1>
+  <p>A lightweight, self-hosted HTTP tunnel. Think ngrok, but yours.</p>
+</div>
 
-A lightweight, self-hosted HTTP tunnel. Think ngrok, but yours.
+<div align="center">
+  <img src="https://img.shields.io/badge/Bun-runtime-000000?logo=bun&logoColor=white&style=flat" alt="Bun runtime">
+  <img src="https://img.shields.io/badge/Node-20%2B-3c873a?logo=node.js&logoColor=white&style=flat" alt="Node 20+">
+  <a href="https://www.npmjs.com/package/@851-labs/auger">
+    <img src="https://img.shields.io/npm/v/@851-labs/auger?label=NPM&style=flat" alt="NPM package">
+  </a>
+  <a href="https://github.com/851-labs/homebrew-tap">
+    <img src="https://img.shields.io/badge/Homebrew-851--labs%2Ftap-fbb040?logo=homebrew&logoColor=white&style=flat" alt="Homebrew tap">
+  </a>
+  <a href="LICENSE">
+    <img src="https://img.shields.io/badge/License-MIT-blue?style=flat" alt="MIT License">
+  </a>
+</div>
 
 ## Use the CLI
 
@@ -76,6 +92,8 @@ pnpm dlx @851-labs/auger http 3000
 </details>
 
 ## Deploy the server
+
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/4oDKBx?referralCode=NN7dxz&utm_medium=integration&utm_source=template&utm_campaign=generic)
 
 <details>
 <summary>Fly.io</summary>
