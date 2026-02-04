@@ -39,3 +39,25 @@ export function generateSubdomain(randomFn: () => number = defaultRandom): strin
   const noun = NOUNS[Math.floor(randomFn() * NOUNS.length)];
   return `${adj}-${noun}`;
 }
+
+export function findAvailableSubdomain(
+  requested: string | undefined,
+  isTaken: (subdomain: string) => boolean,
+  randomFn: () => number = defaultRandom
+): string {
+  if (requested) {
+    if (isTaken(requested)) {
+      throw new Error(`Subdomain "${requested}" is already in use`);
+    }
+    return requested;
+  }
+
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const subdomain = generateSubdomain(randomFn);
+    if (!isTaken(subdomain)) {
+      return subdomain;
+    }
+  }
+
+  return `${generateSubdomain(randomFn)}-${Math.floor(randomFn() * 1000)}`;
+}

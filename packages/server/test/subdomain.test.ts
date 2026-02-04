@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { extractSubdomain } from '../src/http-proxy';
-import { generateSubdomain } from '../src/subdomain';
+import { findAvailableSubdomain, generateSubdomain } from '../src/subdomain';
 
 describe('extractSubdomain', () => {
   test('returns subdomain when host matches base domain', () => {
@@ -29,5 +29,24 @@ describe('generateSubdomain', () => {
     const first = generateSubdomain(random);
     const second = generateSubdomain(random);
     expect(first).not.toBe(second);
+  });
+});
+
+describe('findAvailableSubdomain', () => {
+  test('returns requested subdomain when available', () => {
+    const subdomain = findAvailableSubdomain('custom', () => false);
+    expect(subdomain).toBe('custom');
+  });
+
+  test('throws when requested subdomain is taken', () => {
+    expect(() => findAvailableSubdomain('taken', () => true)).toThrow(
+      'Subdomain "taken" is already in use'
+    );
+  });
+
+  test('returns generated subdomain when no request provided', () => {
+    const random = () => 0;
+    const subdomain = findAvailableSubdomain(undefined, () => false, random);
+    expect(subdomain).toBe('brave-pickle');
   });
 });

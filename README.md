@@ -36,6 +36,21 @@ auger http 3000
 
 You’ll get a public URL like `https://bright-ember.auger.yourdomain.com` that proxies to `http://127.0.0.1:3000`.
 
+Multiple ports:
+
+```bash
+auger http 3000 3001 3002
+```
+
+Custom subdomains (single port):
+
+```bash
+auger http 3000 --subdomain test
+auger http 3000:test
+```
+
+The `--subdomain` flag only works with a single port. For multiple tunnels, use `<port>:<subdomain>` per entry.
+
 ## Other installation options:
 
 Requires Node 20+ for global installs, `bunx`, `npx`, and `pnpm dlx`.

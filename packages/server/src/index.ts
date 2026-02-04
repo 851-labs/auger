@@ -9,7 +9,7 @@ import type {
 import { loadConfig } from './config';
 import { AugerDb } from './db';
 import { buildHttpRequestMessage, buildHttpResponse, extractSubdomain } from './http-proxy';
-import { generateSubdomain } from './subdomain';
+import { findAvailableSubdomain } from './subdomain';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -63,21 +63,6 @@ function sendError(ws: ServerWebSocket<WsData>, message: string): void {
 function isTokenValid(token?: string): boolean {
   if (config.tokens.length === 0) return true;
   return token !== undefined && config.tokens.includes(token);
-}
-
-function findAvailableSubdomain(requested?: string): string {
-  if (requested && !subdomainToClient.has(requested)) {
-    return requested;
-  }
-
-  for (let attempt = 0; attempt < 10; attempt += 1) {
-    const subdomain = generateSubdomain();
-    if (!subdomainToClient.has(subdomain)) {
-      return subdomain;
-    }
-  }
-
-  return `${generateSubdomain()}-${Math.floor(Math.random() * 1000)}`;
 }
 
 async function handleHttpRequest(request: Request): Promise<Response> {
@@ -171,7 +156,9 @@ function registerClient(ws: ServerWebSocket<WsData>, hello: HelloMessage): Clien
   };
 
   if (hello.tunnelType === 'http') {
-    const subdomain = findAvailableSubdomain(hello.requestedSubdomain);
+    const subdomain = findAvailableSubdomain(hello.requestedSubdomain, (candidate) =>
+      subdomainToClient.has(candidate)
+    );
     entry.subdomain = subdomain;
     subdomainToClient.set(subdomain, clientId);
 

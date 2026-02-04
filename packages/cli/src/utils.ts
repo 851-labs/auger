@@ -36,8 +36,41 @@ export function buildWsUrl(serverUrl: string, wsPath: string): string {
   return wsUrl.toString();
 }
 
-export function getNumber(value: string | undefined): number | null {
-  if (!value) return null;
-  const parsed = Number.parseInt(value, 10);
-  return Number.isNaN(parsed) ? null : parsed;
+export type PortSpec = {
+  localPort: number;
+  subdomain?: string;
+};
+
+export function parsePortSpec(value: string): { spec?: PortSpec; error?: string } {
+  const colonIndex = value.indexOf(':');
+  let portPart = value;
+  let subdomainPart: string | undefined;
+
+  if (colonIndex >= 0) {
+    portPart = value.slice(0, colonIndex);
+    subdomainPart = value.slice(colonIndex + 1);
+    if (subdomainPart.includes(':')) {
+      return { error: `Invalid port spec "${value}". Use <port> or <port>:<subdomain>.` };
+    }
+  }
+
+  if (!portPart) {
+    return { error: `Invalid port spec "${value}". Port is required.` };
+  }
+
+  const localPort = Number.parseInt(portPart, 10);
+  if (Number.isNaN(localPort) || localPort <= 0) {
+    return { error: `Invalid port "${portPart}".` };
+  }
+
+  if (subdomainPart !== undefined && subdomainPart.length === 0) {
+    return { error: `Invalid port spec "${value}". Subdomain is required after ":".` };
+  }
+
+  return {
+    spec: {
+      localPort,
+      subdomain: subdomainPart,
+    },
+  };
 }

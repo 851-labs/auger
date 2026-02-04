@@ -13,7 +13,8 @@ export type HttpCommandOptions = {
 async function handleHttpRequest(
   ws: WebSocket,
   localPort: number,
-  message: HttpRequestMessage
+  message: HttpRequestMessage,
+  label: string
 ): Promise<void> {
   try {
     const headers = new Headers(message.headers);
@@ -48,6 +49,7 @@ async function handleHttpRequest(
     };
 
     ws.send(toMessage(payload));
+    console.log(`[${label}] ${message.method} ${message.path} -> ${response.status}`);
   } catch (error) {
     const payload: HttpResponseMessage = {
       type: 'http_response',
@@ -57,11 +59,15 @@ async function handleHttpRequest(
       bodyBase64: encodeBase64(Buffer.from('Bad Gateway')),
     };
     ws.send(toMessage(payload));
+    console.log(`[${label}] ${message.method} ${message.path} -> 502`);
   }
 }
 
 export async function runHttpCommand(options: HttpCommandOptions): Promise<void> {
   const wsUrl = buildWsUrl(options.serverUrl, options.wsPath);
+  const label = options.subdomain
+    ? `${options.subdomain}:${options.localPort}`
+    : `${options.localPort}`;
   let ws: WebSocket | null = null;
   let consecutiveFailures = 0;
   let reconnectScheduled = false;
@@ -75,11 +81,11 @@ export async function runHttpCommand(options: HttpCommandOptions): Promise<void>
     reconnectScheduled = true;
     consecutiveFailures += 1;
     if (consecutiveFailures > 5) {
-      console.error('Connection lost. Retry limit reached, exiting.');
+      console.error(`[${label}] Connection lost. Retry limit reached, exiting.`);
       process.exit(1);
     }
     const attempt = consecutiveFailures;
-    console.warn(`Connection lost (${reason}). Retrying (${attempt}/5) in 2s...`);
+    console.warn(`[${label}] Connection lost (${reason}). Retrying (${attempt}/5) in 2s...`);
     setTimeout(() => {
       reconnectScheduled = false;
       connect();
@@ -110,7 +116,7 @@ export async function runHttpCommand(options: HttpCommandOptions): Promise<void>
       const message = parseMessage(data);
 
       if (message.type === 'error') {
-        console.error(`Server error: ${message.message}`);
+        console.error(`[${label}] Server error: ${message.message}`);
         fatalError = true;
         ws?.close();
         return;
@@ -118,15 +124,15 @@ export async function runHttpCommand(options: HttpCommandOptions): Promise<void>
 
       if (message.type === 'welcome') {
         if (message.publicUrl) {
-          console.log(`Tunnel ready: ${message.publicUrl}`);
+          console.log(`[${label}] Tunnel ready: ${message.publicUrl}`);
         } else {
-          console.log('Tunnel ready.');
+          console.log(`[${label}] Tunnel ready.`);
         }
         return;
       }
 
       if (message.type === 'http_request') {
-        await handleHttpRequest(ws as WebSocket, options.localPort, message);
+        await handleHttpRequest(ws as WebSocket, options.localPort, message, label);
       }
     });
 
@@ -135,7 +141,7 @@ export async function runHttpCommand(options: HttpCommandOptions): Promise<void>
     });
 
     ws.addEventListener('error', (error) => {
-      console.error('WebSocket error', error);
+      console.error(`[${label}] WebSocket error`, error);
       scheduleReconnect('error');
     });
   };
