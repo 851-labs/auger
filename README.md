@@ -38,7 +38,63 @@ You’ll get a public URL like `https://bright-ember.auger.yourdomain.com` that 
 
 ## Other installation options:
 
-Requires Node 20+ for `bunx`, `npx`, and `pnpm dlx`.
+Requires Node 20+ for global installs, `bunx`, `npx`, and `pnpm dlx`.
+
+<details>
+<summary>npm</summary>
+
+Install:
+
+```bash
+npm install -g @851-labs/auger
+```
+
+Use:
+
+```bash
+auger init
+auger http 3000
+```
+
+</details>
+
+<details>
+<summary>pnpm</summary>
+
+Install:
+
+```bash
+pnpm add -g @851-labs/auger
+```
+
+Use:
+
+```bash
+auger init
+auger http 3000
+```
+
+</details>
+
+<details>
+<summary>bun</summary>
+
+Install:
+
+```bash
+bun add -g @851-labs/auger
+```
+
+Use:
+
+```bash
+auger init
+auger http 3000
+```
+
+</details>
+
+<br>
 
 <details>
 <summary>bunx</summary>
