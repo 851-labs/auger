@@ -1,9 +1,9 @@
-FROM oven/bun:1
+FROM oven/bun:latest
 
 WORKDIR /app
 COPY . .
 
-RUN bun install --production --no-save
+RUN bun install --production
 
 EXPOSE 8080
 CMD ["bun", "run", "packages/server/src/index.ts"]
