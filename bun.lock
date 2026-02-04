@@ -15,8 +15,8 @@
       },
     },
     "packages/cli": {
-      "name": "auger",
-      "version": "0.0.0",
+      "name": "@851-labs/auger",
+      "version": "0.0.1",
       "bin": {
         "auger": "dist/index.js",
       },
@@ -26,17 +26,19 @@
     },
     "packages/server": {
       "name": "@auger/server",
-      "version": "0.0.0",
+      "version": "0.0.1",
       "dependencies": {
         "@auger/shared": "workspace:*",
       },
     },
     "packages/shared": {
       "name": "@auger/shared",
-      "version": "0.0.0",
+      "version": "0.0.1",
     },
   },
   "packages": {
+    "@851-labs/auger": ["@851-labs/auger@workspace:packages/cli"],
+
     "@auger/server": ["@auger/server@workspace:packages/server"],
 
     "@auger/shared": ["@auger/shared@workspace:packages/shared"],
@@ -94,8 +96,6 @@
     "argparse": ["argparse@2.0.1", "", {}, "sha512-8+9WqebbFzpX9OR+Wa6O29asIogeRMzcGtAINdpMHHyAg10f05aSFVBbcEqGf/PXw1EjAZ+q2/bEBg3DvurK3Q=="],
 
     "array-union": ["array-union@2.1.0", "", {}, "sha512-HGyxoOTYUyCM6stUe6EJgnd4EoewAI7zMdfqO+kGjnlZmBDz/cR5pf8r/cR4Wq60sL/p0IkcjUEEPwS3GFrIyw=="],
-
-    "auger": ["auger@workspace:packages/cli"],
 
     "balanced-match": ["balanced-match@1.0.2", "", {}, "sha512-3oSeUO0TMV67hN1AmbXsK4yaqU7tjiHlbxRDZOpH0KW9+CeX4bRAaX0Anxt0tx2MrpRpWwQaPwIlISEJhYU5Pw=="],
 
