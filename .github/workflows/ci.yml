@@ -75,10 +75,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-13
+          - os: macos-15-intel
             target: bun-darwin-x64
             asset: auger-darwin-x64.tar.gz
-          - os: macos-14
+          - os: macos-15
             target: bun-darwin-arm64
             asset: auger-darwin-arm64.tar.gz
           - os: ubuntu-22.04
