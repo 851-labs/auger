@@ -1,0 +1,26 @@
+{
+  "name": "auger",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "lint": "eslint -c config/.eslintrc.cjs .",
+    "format": "prettier --config config/.prettierrc --write .",
+    "format:check": "prettier --config config/.prettierrc --check .",
+    "typecheck": "tsc -b",
+    "test": "bun test",
+    "build": "bun run build:cli && bun run build:server",
+    "build:cli": "bun build packages/cli/src/index.ts --outdir packages/cli/dist --target bun",
+    "build:server": "bun build packages/server/src/index.ts --outdir packages/server/dist --target bun"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "@typescript-eslint/eslint-plugin": "^7.4.0",
+    "@typescript-eslint/parser": "^7.4.0",
+    "bun-types": "^1.0.27",
+    "eslint": "^8.57.0",
+    "prettier": "^3.2.5",
+    "typescript": "^5.4.2"
+  }
+}

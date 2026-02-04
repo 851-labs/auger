@@ -1,0 +1,11 @@
+.git
+.github
+.vscode
+.DS_Store
+node_modules
+**/node_modules
+**/dist
+**/.cache
+**/*.log
+bun.lockb
+examples
