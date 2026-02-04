@@ -4,6 +4,8 @@ A lightweight, self-hosted HTTP tunnel. Think ngrok, but yours.
 
 ## Install the CLI
 
+Requires Node 20+.
+
 ```bash
 npx @851-labs/auger init
 ```

@@ -11,7 +11,7 @@
     "typecheck": "tsc -b",
     "test": "bun test",
     "build": "bun run build:cli && bun run build:server",
-    "build:cli": "bun build packages/cli/src/index.ts --outdir packages/cli/dist --target bun",
+    "build:cli": "bun build packages/cli/src/index.ts --outdir packages/cli/dist --target node",
     "build:server": "bun build packages/server/src/index.ts --outdir packages/server/dist --target bun"
   },
   "devDependencies": {
