@@ -1,5 +1,12 @@
 import { decodeBase64, encodeBase64, parseMessage, toMessage } from '@auger/shared';
-import type { HelloMessage, HttpRequestMessage, HttpResponseMessage } from '@auger/shared';
+import type {
+  HelloMessage,
+  HttpRequestMessage,
+  HttpResponseChunkMessage,
+  HttpResponseEndMessage,
+  HttpResponseMessage,
+  HttpResponseStartMessage,
+} from '@auger/shared';
 import { buildWsUrl } from '../utils';
 
 export type HttpCommandOptions = {
@@ -16,6 +23,18 @@ async function handleHttpRequest(
   message: HttpRequestMessage,
   label: string
 ): Promise<void> {
+  const send = (
+    payload:
+      | HttpResponseMessage
+      | HttpResponseStartMessage
+      | HttpResponseChunkMessage
+      | HttpResponseEndMessage
+  ) => {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(toMessage(payload));
+    }
+  };
+
   try {
     const headers = new Headers(message.headers);
     headers.delete('host');
@@ -34,21 +53,44 @@ async function handleHttpRequest(
       body: bodyBlob,
     });
 
-    const responseBody = await response.arrayBuffer();
     const responseHeaders: Record<string, string> = {};
     for (const [key, value] of response.headers.entries()) {
       responseHeaders[key] = value;
     }
 
-    const payload: HttpResponseMessage = {
-      type: 'http_response',
+    const startPayload: HttpResponseStartMessage = {
+      type: 'http_response_start',
       id: message.id,
       status: response.status,
       headers: responseHeaders,
-      bodyBase64: encodeBase64(responseBody),
     };
+    send(startPayload);
 
-    ws.send(toMessage(payload));
+    if (response.body) {
+      const reader = response.body.getReader();
+      let doneReading = false;
+      while (!doneReading) {
+        const { done: chunkDone, value } = await reader.read();
+        if (chunkDone) {
+          doneReading = true;
+          continue;
+        }
+        if (!value || value.byteLength === 0) continue;
+
+        const chunkPayload: HttpResponseChunkMessage = {
+          type: 'http_response_chunk',
+          id: message.id,
+          chunkBase64: encodeBase64(value),
+        };
+        send(chunkPayload);
+      }
+    }
+
+    const endPayload: HttpResponseEndMessage = {
+      type: 'http_response_end',
+      id: message.id,
+    };
+    send(endPayload);
     console.log(`[${label}] ${message.method} ${message.path} -> ${response.status}`);
   } catch (error) {
     const payload: HttpResponseMessage = {
@@ -58,7 +100,7 @@ async function handleHttpRequest(
       headers: { 'content-type': 'text/plain' },
       bodyBase64: encodeBase64(Buffer.from('Bad Gateway')),
     };
-    ws.send(toMessage(payload));
+    send(payload);
     console.log(`[${label}] ${message.method} ${message.path} -> 502`);
   }
 }

@@ -1,9 +1,12 @@
 import type { ServerWebSocket } from 'bun';
-import { parseMessage, randomId, toMessage } from '@auger/shared';
+import { decodeBase64, parseMessage, randomId, toMessage } from '@auger/shared';
 import type {
   ClientToServerMessage,
   HelloMessage,
+  HttpResponseChunkMessage,
+  HttpResponseEndMessage,
   HttpResponseMessage,
+  HttpResponseStartMessage,
   TunnelType,
 } from '@auger/shared';
 import { loadConfig } from './config';
@@ -33,6 +36,8 @@ type PendingHttp = {
   resolve: (response: Response) => void;
   reject: (error: Error) => void;
   timeout: ReturnType<typeof setTimeout>;
+  streamController?: ReadableStreamDefaultController<Uint8Array>;
+  streamStarted: boolean;
 };
 
 const config = loadConfig();
@@ -96,6 +101,7 @@ async function handleHttpRequest(request: Request): Promise<Response> {
       resolve,
       reject,
       timeout,
+      streamStarted: false,
     });
   });
 
@@ -118,6 +124,53 @@ function handleHttpResponse(clientId: string, message: HttpResponseMessage): voi
   pending.resolve(buildHttpResponse(message));
 }
 
+function handleHttpResponseStart(clientId: string, message: HttpResponseStartMessage): void {
+  const pending = pendingHttp.get(message.id);
+  if (!pending) return;
+  if (pending.clientId !== clientId) return;
+  if (pending.streamStarted) return;
+
+  pending.streamStarted = true;
+  clearTimeout(pending.timeout);
+
+  const headers = new Headers(message.headers);
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      pending.streamController = controller;
+    },
+  });
+
+  pending.resolve(
+    new Response(body, {
+      status: message.status,
+      headers,
+    })
+  );
+}
+
+function handleHttpResponseChunk(clientId: string, message: HttpResponseChunkMessage): void {
+  const pending = pendingHttp.get(message.id);
+  if (!pending) return;
+  if (pending.clientId !== clientId) return;
+  if (!pending.streamStarted || !pending.streamController) return;
+
+  pending.streamController.enqueue(decodeBase64(message.chunkBase64));
+}
+
+function handleHttpResponseEnd(clientId: string, message: HttpResponseEndMessage): void {
+  const pending = pendingHttp.get(message.id);
+  if (!pending) return;
+  if (pending.clientId !== clientId) return;
+
+  clearTimeout(pending.timeout);
+
+  if (pending.streamStarted && pending.streamController) {
+    pending.streamController.close();
+  }
+
+  pendingHttp.delete(message.id);
+}
+
 function cleanupClient(clientId: string): void {
   const client = clients.get(clientId);
   if (!client) return;
@@ -129,7 +182,11 @@ function cleanupClient(clientId: string): void {
   for (const [requestId, pending] of pendingHttp.entries()) {
     if (pending.clientId === clientId) {
       clearTimeout(pending.timeout);
-      pending.reject(new Error('Client disconnected'));
+      if (pending.streamStarted && pending.streamController) {
+        pending.streamController.error(new Error('Client disconnected'));
+      } else {
+        pending.reject(new Error('Client disconnected'));
+      }
       pendingHttp.delete(requestId);
     }
   }
@@ -247,6 +304,15 @@ const server = Bun.serve<WsData>({
       switch (message.type) {
         case 'http_response':
           handleHttpResponse(clientId, message);
+          break;
+        case 'http_response_start':
+          handleHttpResponseStart(clientId, message);
+          break;
+        case 'http_response_chunk':
+          handleHttpResponseChunk(clientId, message);
+          break;
+        case 'http_response_end':
+          handleHttpResponseEnd(clientId, message);
           break;
         default:
           break;

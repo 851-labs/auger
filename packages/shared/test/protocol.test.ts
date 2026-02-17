@@ -25,4 +25,33 @@ describe('protocol', () => {
   test('rejects unknown message type', () => {
     expect(() => parseMessage('{"type":"nope"}')).toThrow();
   });
+
+  test('parse streamed http response messages', () => {
+    const start = parseMessage(
+      toMessage({
+        type: 'http_response_start',
+        id: 'req-1',
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      })
+    );
+    expect(start.type).toBe('http_response_start');
+
+    const chunk = parseMessage(
+      toMessage({
+        type: 'http_response_chunk',
+        id: 'req-1',
+        chunkBase64: encodeBase64(new Uint8Array([1, 2, 3])),
+      })
+    );
+    expect(chunk.type).toBe('http_response_chunk');
+
+    const end = parseMessage(
+      toMessage({
+        type: 'http_response_end',
+        id: 'req-1',
+      })
+    );
+    expect(end.type).toBe('http_response_end');
+  });
 });

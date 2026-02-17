@@ -39,9 +39,32 @@ export type HttpResponseMessage = {
   bodyBase64: string;
 };
 
+export type HttpResponseStartMessage = {
+  type: 'http_response_start';
+  id: string;
+  status: number;
+  headers: Record<string, string>;
+};
+
+export type HttpResponseChunkMessage = {
+  type: 'http_response_chunk';
+  id: string;
+  chunkBase64: string;
+};
+
+export type HttpResponseEndMessage = {
+  type: 'http_response_end';
+  id: string;
+};
+
 export type ServerToClientMessage = WelcomeMessage | ErrorMessage | HttpRequestMessage;
 
-export type ClientToServerMessage = HelloMessage | HttpResponseMessage;
+export type ClientToServerMessage =
+  | HelloMessage
+  | HttpResponseMessage
+  | HttpResponseStartMessage
+  | HttpResponseChunkMessage
+  | HttpResponseEndMessage;
 
 export type AnyMessage = ServerToClientMessage | ClientToServerMessage;
 
@@ -130,6 +153,18 @@ export function parseMessage(raw: string): AnyMessage {
       assertHeaders(parsed.headers);
       assertString(parsed.bodyBase64, 'bodyBase64');
       return parsed as HttpResponseMessage;
+    case 'http_response_start':
+      assertString(parsed.id, 'id');
+      assertNumber(parsed.status, 'status');
+      assertHeaders(parsed.headers);
+      return parsed as HttpResponseStartMessage;
+    case 'http_response_chunk':
+      assertString(parsed.id, 'id');
+      assertString(parsed.chunkBase64, 'chunkBase64');
+      return parsed as HttpResponseChunkMessage;
+    case 'http_response_end':
+      assertString(parsed.id, 'id');
+      return parsed as HttpResponseEndMessage;
     default:
       throw new Error(`Unknown message type: ${type}`);
   }
