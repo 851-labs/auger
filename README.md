@@ -42,6 +42,25 @@ Multiple ports:
 auger http 3000 3001 3002
 ```
 
+Run in background:
+
+```bash
+auger http 3000 --daemon
+```
+
+List running tunnels:
+
+```bash
+auger list
+```
+
+Stop a running tunnel:
+
+```bash
+auger kill 3000
+auger kill 20260218214356-fdz3hq
+```
+
 Custom subdomains:
 
 ```bash
