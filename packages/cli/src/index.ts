@@ -7,7 +7,7 @@ import { parseArgs, parsePortSpec, type PortSpec } from './utils';
 function printUsage(): void {
   console.log(`Usage:
   auger init
-  auger http <localPort...> [--subdomain name] [--server url] [--token token]
+  auger http <localPort...> [--server url] [--token token]
   auger http <localPort:subdomain> [--server url] [--token token]
   auger <localPort...> (alias for auger http <localPort...>)
 `);
@@ -62,7 +62,13 @@ async function main() {
   const config = await resolveConfig(flags);
 
   if (command === 'http') {
-    const subdomainFlag = typeof flags.subdomain === 'string' ? flags.subdomain : undefined;
+    if (flags.subdomain !== undefined) {
+      console.error(
+        'The --subdomain flag has been removed. Use <port>:<subdomain>, for example: auger http 3000:test'
+      );
+      printUsage();
+      process.exit(1);
+    }
     const specs: PortSpec[] = [];
 
     for (const value of positionals) {
@@ -75,22 +81,6 @@ async function main() {
       if (parsed.spec) {
         specs.push(parsed.spec);
       }
-    }
-
-    if (subdomainFlag) {
-      if (specs.length > 1) {
-        console.error('The --subdomain flag can only be used with a single port.');
-        printUsage();
-        process.exit(1);
-      }
-      if (specs[0]?.subdomain) {
-        console.error(
-          'Subdomain was provided twice. Use either --subdomain or <port>:<subdomain>.'
-        );
-        printUsage();
-        process.exit(1);
-      }
-      specs[0].subdomain = subdomainFlag;
     }
 
     const seenSubdomains = new Set<string>();

@@ -42,14 +42,12 @@ Multiple ports:
 auger http 3000 3001 3002
 ```
 
-Custom subdomains (single port):
+Custom subdomains:
 
 ```bash
-auger http 3000 --subdomain test
 auger http 3000:test
+auger http 3000:test 3001:api 3002:webhook
 ```
-
-The `--subdomain` flag only works with a single port. For multiple tunnels, use `<port>:<subdomain>` per entry.
 
 ## Other installation options:
 
