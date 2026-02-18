@@ -65,7 +65,10 @@ function setupDaemonCleanup(daemonId: string): void {
   });
 }
 
-async function startDaemon(specs: PortSpec[], config: { serverUrl: string; token?: string; wsPath?: string }) {
+async function startDaemon(
+  specs: PortSpec[],
+  config: { serverUrl: string; token?: string; wsPath?: string }
+) {
   const daemonId = createDaemonId();
   const wsPath = config.wsPath || '/ws';
   const entrypoint = process.argv[1];
@@ -73,12 +76,7 @@ async function startDaemon(specs: PortSpec[], config: { serverUrl: string; token
     throw new Error('Unable to resolve CLI entrypoint for daemon mode.');
   }
 
-  const workerArgs = [
-    'http',
-    ...specs.map(formatSpec),
-    '--daemon-worker-id',
-    daemonId,
-  ];
+  const workerArgs = ['http', ...specs.map(formatSpec), '--daemon-worker-id', daemonId];
 
   const { logsDir } = getRuntimePaths();
   await ensureRuntimeDirs();

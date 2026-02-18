@@ -29,7 +29,10 @@ export function getRuntimePaths(): {
 
 export async function ensureRuntimeDirs(): Promise<void> {
   const { daemonsDir, logsDir } = getRuntimePaths();
-  await Promise.all([fs.mkdir(daemonsDir, { recursive: true }), fs.mkdir(logsDir, { recursive: true })]);
+  await Promise.all([
+    fs.mkdir(daemonsDir, { recursive: true }),
+    fs.mkdir(logsDir, { recursive: true }),
+  ]);
 }
 
 export function getDaemonRecordPath(id: string): string {

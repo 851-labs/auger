@@ -85,138 +85,122 @@ async function cleanupTestDir(xdgConfigHome: string): Promise<void> {
 }
 
 describe('daemon CLI commands', () => {
-  test(
-    'starts daemon, lists it, and kills by port',
-    async () => {
-      const xdgConfigHome = await createTestDir();
+  test('starts daemon, lists it, and kills by port', async () => {
+    const xdgConfigHome = await createTestDir();
+    try {
+      const start = await runCli(
+        ['http', '3000', '--server', 'http://127.0.0.1:1', '--daemon'],
+        xdgConfigHome
+      );
+      expect(start.code).toBe(0);
+      const daemonId = parseDaemonId(start.stdout);
+      expect(daemonId.length).toBeGreaterThan(0);
+
+      const list = await runCli(['list'], xdgConfigHome);
+      expect(list.code).toBe(0);
+      expect(list.stdout).toContain(daemonId);
+      expect(list.stdout).toContain('tunnels: 3000');
+
+      const kill = await runCli(['kill', '3000'], xdgConfigHome);
+      expect(kill.code).toBe(0);
+      expect(kill.stdout).toContain(`Daemon ${daemonId} (3000)`);
+
+      const finalList = await runCli(['list'], xdgConfigHome);
+      expect(finalList.code).toBe(0);
+      expect(finalList.stdout).toContain('No running daemon tunnels.');
+    } finally {
+      await cleanupTestDir(xdgConfigHome);
+    }
+  }, 30000);
+
+  test('kills daemon by id', async () => {
+    const xdgConfigHome = await createTestDir();
+    try {
+      const start = await runCli(
+        ['http', '3001', '--server', 'http://127.0.0.1:1', '--daemon'],
+        xdgConfigHome
+      );
+      expect(start.code).toBe(0);
+      const daemonId = parseDaemonId(start.stdout);
+
+      const kill = await runCli(['kill', daemonId], xdgConfigHome);
+      expect(kill.code).toBe(0);
+      expect(kill.stdout).toContain(`Daemon ${daemonId} (3001)`);
+
+      const list = await runCli(['list'], xdgConfigHome);
+      expect(list.code).toBe(0);
+      expect(list.stdout).toContain('No running daemon tunnels.');
+    } finally {
+      await cleanupTestDir(xdgConfigHome);
+    }
+  }, 30000);
+
+  test('list prunes stale daemon records', async () => {
+    const xdgConfigHome = await createTestDir();
+    try {
+      const daemonsDir = path.join(xdgConfigHome, 'auger', 'runtime', 'daemons');
+      await fs.mkdir(daemonsDir, { recursive: true });
+
+      const staleId = 'stale-daemon';
+      const stalePath = path.join(daemonsDir, `${staleId}.json`);
+      await fs.writeFile(
+        stalePath,
+        JSON.stringify(
+          {
+            id: staleId,
+            pid: 999999,
+            startedAt: new Date().toISOString(),
+            specs: [{ localPort: 3999 }],
+            config: { serverUrl: 'http://127.0.0.1:1', wsPath: '/ws' },
+            logFile: '/tmp/stale.log',
+          },
+          null,
+          2
+        ),
+        'utf8'
+      );
+
+      const list = await runCli(['list'], xdgConfigHome);
+      expect(list.code).toBe(0);
+      expect(list.stdout).toContain('No running daemon tunnels.');
+
+      let removed = false;
       try {
-        const start = await runCli(
-          ['http', '3000', '--server', 'http://127.0.0.1:1', '--daemon'],
-          xdgConfigHome
-        );
-        expect(start.code).toBe(0);
-        const daemonId = parseDaemonId(start.stdout);
-        expect(daemonId.length).toBeGreaterThan(0);
-
-        const list = await runCli(['list'], xdgConfigHome);
-        expect(list.code).toBe(0);
-        expect(list.stdout).toContain(daemonId);
-        expect(list.stdout).toContain('tunnels: 3000');
-
-        const kill = await runCli(['kill', '3000'], xdgConfigHome);
-        expect(kill.code).toBe(0);
-        expect(kill.stdout).toContain(`Daemon ${daemonId} (3000)`);
-
-        const finalList = await runCli(['list'], xdgConfigHome);
-        expect(finalList.code).toBe(0);
-        expect(finalList.stdout).toContain('No running daemon tunnels.');
-      } finally {
-        await cleanupTestDir(xdgConfigHome);
+        await fs.access(stalePath);
+      } catch {
+        removed = true;
       }
-    },
-    30000
-  );
+      expect(removed).toBe(true);
+    } finally {
+      await cleanupTestDir(xdgConfigHome);
+    }
+  }, 30000);
 
-  test(
-    'kills daemon by id',
-    async () => {
-      const xdgConfigHome = await createTestDir();
-      try {
-        const start = await runCli(
-          ['http', '3001', '--server', 'http://127.0.0.1:1', '--daemon'],
-          xdgConfigHome
-        );
-        expect(start.code).toBe(0);
-        const daemonId = parseDaemonId(start.stdout);
+  test('kill by port fails when multiple daemons match', async () => {
+    const xdgConfigHome = await createTestDir();
+    try {
+      const startA = await runCli(
+        ['http', '3010', '--server', 'http://127.0.0.1:1', '--daemon'],
+        xdgConfigHome
+      );
+      expect(startA.code).toBe(0);
+      const daemonA = parseDaemonId(startA.stdout);
 
-        const kill = await runCli(['kill', daemonId], xdgConfigHome);
-        expect(kill.code).toBe(0);
-        expect(kill.stdout).toContain(`Daemon ${daemonId} (3001)`);
+      const startB = await runCli(
+        ['http', '3010:test', '--server', 'http://127.0.0.1:1', '--daemon'],
+        xdgConfigHome
+      );
+      expect(startB.code).toBe(0);
+      const daemonB = parseDaemonId(startB.stdout);
 
-        const list = await runCli(['list'], xdgConfigHome);
-        expect(list.code).toBe(0);
-        expect(list.stdout).toContain('No running daemon tunnels.');
-      } finally {
-        await cleanupTestDir(xdgConfigHome);
-      }
-    },
-    30000
-  );
+      const killByPort = await runCli(['kill', '3010'], xdgConfigHome);
+      expect(killByPort.code).toBe(1);
+      expect(killByPort.stderr).toContain('More than one daemon matches port 3010');
 
-  test(
-    'list prunes stale daemon records',
-    async () => {
-      const xdgConfigHome = await createTestDir();
-      try {
-        const daemonsDir = path.join(xdgConfigHome, 'auger', 'runtime', 'daemons');
-        await fs.mkdir(daemonsDir, { recursive: true });
-
-        const staleId = 'stale-daemon';
-        const stalePath = path.join(daemonsDir, `${staleId}.json`);
-        await fs.writeFile(
-          stalePath,
-          JSON.stringify(
-            {
-              id: staleId,
-              pid: 999999,
-              startedAt: new Date().toISOString(),
-              specs: [{ localPort: 3999 }],
-              config: { serverUrl: 'http://127.0.0.1:1', wsPath: '/ws' },
-              logFile: '/tmp/stale.log',
-            },
-            null,
-            2
-          ),
-          'utf8'
-        );
-
-        const list = await runCli(['list'], xdgConfigHome);
-        expect(list.code).toBe(0);
-        expect(list.stdout).toContain('No running daemon tunnels.');
-
-        let removed = false;
-        try {
-          await fs.access(stalePath);
-        } catch {
-          removed = true;
-        }
-        expect(removed).toBe(true);
-      } finally {
-        await cleanupTestDir(xdgConfigHome);
-      }
-    },
-    30000
-  );
-
-  test(
-    'kill by port fails when multiple daemons match',
-    async () => {
-      const xdgConfigHome = await createTestDir();
-      try {
-        const startA = await runCli(
-          ['http', '3010', '--server', 'http://127.0.0.1:1', '--daemon'],
-          xdgConfigHome
-        );
-        expect(startA.code).toBe(0);
-        const daemonA = parseDaemonId(startA.stdout);
-
-        const startB = await runCli(
-          ['http', '3010:test', '--server', 'http://127.0.0.1:1', '--daemon'],
-          xdgConfigHome
-        );
-        expect(startB.code).toBe(0);
-        const daemonB = parseDaemonId(startB.stdout);
-
-        const killByPort = await runCli(['kill', '3010'], xdgConfigHome);
-        expect(killByPort.code).toBe(1);
-        expect(killByPort.stderr).toContain('More than one daemon matches port 3010');
-
-        await runCli(['kill', daemonA], xdgConfigHome);
-        await runCli(['kill', daemonB], xdgConfigHome);
-      } finally {
-        await cleanupTestDir(xdgConfigHome);
-      }
-    },
-    30000
-  );
+      await runCli(['kill', daemonA], xdgConfigHome);
+      await runCli(['kill', daemonB], xdgConfigHome);
+    } finally {
+      await cleanupTestDir(xdgConfigHome);
+    }
+  }, 30000);
 });

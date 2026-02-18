@@ -19,7 +19,7 @@ jobs:
         if: matrix.use_docker != true
       - run: bun run lint
       - run: bun run typecheck
-      - run: bun test
+      - run: bun test packages/*/test
       - run: bun run format:check
       - run: bun run build
 
