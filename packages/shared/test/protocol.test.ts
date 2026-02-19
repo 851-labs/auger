@@ -54,4 +54,37 @@ describe('protocol', () => {
     );
     expect(end.type).toBe('http_response_end');
   });
+
+  test('parse websocket relay messages', () => {
+    const open = parseMessage(
+      toMessage({
+        type: 'ws_open',
+        id: 'ws-1',
+        path: '/socket?room=abc',
+        headers: { origin: 'https://example.com' },
+        protocols: ['chat.v1'],
+      })
+    );
+    expect(open.type).toBe('ws_open');
+
+    const frame = parseMessage(
+      toMessage({
+        type: 'ws_frame',
+        id: 'ws-1',
+        dataBase64: encodeBase64(new Uint8Array([1, 2, 3])),
+        isBinary: true,
+      })
+    );
+    expect(frame.type).toBe('ws_frame');
+
+    const close = parseMessage(
+      toMessage({
+        type: 'ws_close',
+        id: 'ws-1',
+        code: 1000,
+        reason: 'done',
+      })
+    );
+    expect(close.type).toBe('ws_close');
+  });
 });

@@ -1,5 +1,5 @@
 import type { ServerWebSocket } from 'bun';
-import { decodeBase64, parseMessage, randomId, toMessage } from '@auger/shared';
+import { decodeBase64, encodeBase64, parseMessage, randomId, toMessage } from '@auger/shared';
 import type {
   ClientToServerMessage,
   HelloMessage,
@@ -8,6 +8,8 @@ import type {
   HttpResponseMessage,
   HttpResponseStartMessage,
   TunnelType,
+  WsCloseMessage,
+  WsFrameMessage,
 } from '@auger/shared';
 import { loadConfig } from './config';
 import { AugerDb } from './db';
@@ -18,9 +20,21 @@ import path from 'node:path';
 
 const HTTP_TIMEOUT_MS = 30_000;
 
-type WsData = {
+type ControlWsData = {
+  kind: 'control';
   clientId: string | null;
 };
+
+type PublicWsData = {
+  kind: 'public';
+  clientId: string;
+  socketId: string;
+  path: string;
+  headers: Record<string, string>;
+  protocols: string[];
+};
+
+type WsData = ControlWsData | PublicWsData;
 
 type ClientEntry = {
   id: string;
@@ -40,10 +54,26 @@ type PendingHttp = {
   streamStarted: boolean;
 };
 
+type PublicSocketEntry = {
+  id: string;
+  clientId: string;
+  socket: ServerWebSocket<WsData>;
+};
+
+type UpgradeServer = {
+  upgrade: (
+    request: Request,
+    options: { data: WsData; headers?: Record<string, string> }
+  ) => boolean;
+};
+
 const config = loadConfig();
 const clients = new Map<string, ClientEntry>();
 const subdomainToClient = new Map<string, string>();
 const pendingHttp = new Map<string, PendingHttp>();
+const publicSockets = new Map<string, PublicSocketEntry>();
+const textEncoder = new TextEncoder();
+const textDecoder = new TextDecoder();
 
 if (config.dbPath !== ':memory:') {
   await mkdir(path.dirname(config.dbPath), { recursive: true });
@@ -70,23 +100,46 @@ function isTokenValid(token?: string): boolean {
   return token !== undefined && config.tokens.includes(token);
 }
 
-async function handleHttpRequest(request: Request): Promise<Response> {
+function getClientForRequest(request: Request): { clientId: string; client: ClientEntry } | null {
   const hostHeader = request.headers.get('host') || '';
   const subdomain = extractSubdomain(hostHeader, config.baseDomain);
   if (!subdomain) {
-    return new Response('Not Found', { status: 404 });
+    return null;
   }
 
   const clientId = subdomainToClient.get(subdomain);
   if (!clientId) {
-    return new Response('Tunnel not found', { status: 404 });
+    return null;
   }
 
   const client = clients.get(clientId);
   if (!client || client.tunnelType !== 'http') {
+    return null;
+  }
+
+  return { clientId, client };
+}
+
+function isWebSocketUpgradeRequest(request: Request): boolean {
+  const upgrade = request.headers.get('upgrade');
+  return typeof upgrade === 'string' && upgrade.toLowerCase() === 'websocket';
+}
+
+async function handleHttpRequest(request: Request): Promise<Response> {
+  const resolvedClient = getClientForRequest(request);
+  if (!resolvedClient) {
+    const hostHeader = request.headers.get('host') || '';
+    const subdomain = extractSubdomain(hostHeader, config.baseDomain);
+    if (!subdomain) {
+      return new Response('Not Found', { status: 404 });
+    }
+    if (!subdomainToClient.has(subdomain)) {
+      return new Response('Tunnel not found', { status: 404 });
+    }
     return new Response('Tunnel unavailable', { status: 502 });
   }
 
+  const { clientId, client } = resolvedClient;
   const requestId = randomId('req');
   const message = await buildHttpRequestMessage(request, requestId);
 
@@ -112,6 +165,57 @@ async function handleHttpRequest(request: Request): Promise<Response> {
   } catch (error) {
     return new Response('Gateway Timeout', { status: 504 });
   }
+}
+
+function handleWebSocketUpgrade(request: Request, server: UpgradeServer): Response | undefined {
+  const hostHeader = request.headers.get('host') || '';
+  const subdomain = extractSubdomain(hostHeader, config.baseDomain);
+  if (!subdomain) {
+    return new Response('Not Found', { status: 404 });
+  }
+
+  const clientId = subdomainToClient.get(subdomain);
+  if (!clientId) {
+    return new Response('Tunnel not found', { status: 404 });
+  }
+
+  const client = clients.get(clientId);
+  if (!client || client.tunnelType !== 'http') {
+    return new Response('Tunnel unavailable', { status: 502 });
+  }
+
+  const url = new URL(request.url);
+  const headers: Record<string, string> = {};
+  for (const [key, value] of request.headers.entries()) {
+    headers[key] = value;
+  }
+
+  const protocolHeader = request.headers.get('sec-websocket-protocol');
+  const requestedProtocols =
+    protocolHeader
+      ?.split(',')
+      .map((value) => value.trim())
+      .filter(Boolean) ?? [];
+  const protocols = requestedProtocols.length > 0 ? [requestedProtocols[0]] : [];
+
+  const socketId = randomId('ws');
+  const upgraded = server.upgrade(request, {
+    data: {
+      kind: 'public',
+      clientId,
+      socketId,
+      path: url.pathname + url.search,
+      headers,
+      protocols,
+    },
+    headers: protocols.length > 0 ? { 'sec-websocket-protocol': protocols[0] } : undefined,
+  });
+
+  if (!upgraded) {
+    return new Response('Upgrade failed', { status: 500 });
+  }
+
+  return;
 }
 
 function handleHttpResponse(clientId: string, message: HttpResponseMessage): void {
@@ -171,6 +275,119 @@ function handleHttpResponseEnd(clientId: string, message: HttpResponseEndMessage
   pendingHttp.delete(message.id);
 }
 
+function normalizeCloseCode(code: number | undefined): number {
+  if (code === undefined) return 1000;
+  if (!Number.isInteger(code)) return 1000;
+  if (code < 1000 || code > 4999) return 1000;
+  return code;
+}
+
+function handleWsFrame(clientId: string, message: WsFrameMessage): void {
+  const socket = publicSockets.get(message.id);
+  if (!socket) return;
+  if (socket.clientId !== clientId) return;
+
+  const decoded = decodeBase64(message.dataBase64);
+  if (message.isBinary) {
+    socket.socket.send(decoded);
+  } else {
+    socket.socket.send(textDecoder.decode(decoded));
+  }
+}
+
+function handleWsClose(clientId: string, message: WsCloseMessage): void {
+  const socket = publicSockets.get(message.id);
+  if (!socket) return;
+  if (socket.clientId !== clientId) return;
+
+  publicSockets.delete(message.id);
+  socket.socket.close(normalizeCloseCode(message.code), message.reason ?? '');
+}
+
+function handlePublicWsMessage(
+  ws: ServerWebSocket<WsData>,
+  rawMessage: string | Buffer | Uint8Array
+): void {
+  if (ws.data.kind !== 'public') return;
+  const client = clients.get(ws.data.clientId);
+  if (!client) {
+    ws.close(1011, 'Tunnel unavailable');
+    return;
+  }
+
+  let payload: Uint8Array;
+  let isBinary = true;
+  if (typeof rawMessage === 'string') {
+    payload = textEncoder.encode(rawMessage);
+    isBinary = false;
+  } else if (rawMessage instanceof Uint8Array) {
+    payload = rawMessage;
+  } else {
+    payload = new Uint8Array(rawMessage);
+  }
+
+  client.socket.send(
+    toMessage({
+      type: 'ws_frame',
+      id: ws.data.socketId,
+      dataBase64: encodeBase64(payload),
+      isBinary,
+    })
+  );
+}
+
+function handlePublicWsOpen(ws: ServerWebSocket<WsData>): void {
+  if (ws.data.kind !== 'public') return;
+
+  publicSockets.set(ws.data.socketId, {
+    id: ws.data.socketId,
+    clientId: ws.data.clientId,
+    socket: ws,
+  });
+
+  const client = clients.get(ws.data.clientId);
+  if (!client) {
+    publicSockets.delete(ws.data.socketId);
+    ws.close(1011, 'Tunnel unavailable');
+    return;
+  }
+
+  client.socket.send(
+    toMessage({
+      type: 'ws_open',
+      id: ws.data.socketId,
+      path: ws.data.path,
+      headers: ws.data.headers,
+      protocols: ws.data.protocols,
+    })
+  );
+}
+
+function handlePublicWsClose(ws: ServerWebSocket<WsData>, code?: number, reason?: string): void {
+  if (ws.data.kind !== 'public') return;
+  const socketId = ws.data.socketId;
+  const socket = publicSockets.get(socketId);
+  if (!socket) {
+    return;
+  }
+
+  publicSockets.delete(socketId);
+
+  const client = clients.get(ws.data.clientId);
+  if (!client) {
+    return;
+  }
+
+  client.socket.send(
+    toMessage({
+      type: 'ws_close',
+      id: socketId,
+      code,
+      reason,
+    })
+  );
+}
+
 function cleanupClient(clientId: string): void {
   const client = clients.get(clientId);
   if (!client) return;
@@ -191,6 +408,12 @@ function cleanupClient(clientId: string): void {
     }
   }
 
+  for (const [socketId, socket] of publicSockets.entries()) {
+    if (socket.clientId !== clientId) continue;
+    publicSockets.delete(socketId);
+    socket.socket.close(1011, 'Tunnel disconnected');
+  }
+
   db.markDisconnected(clientId, new Date().toISOString());
   clients.delete(clientId);
 }
@@ -201,7 +424,7 @@ function registerClient(ws: ServerWebSocket<WsData>, hello: HelloMessage): Clien
   }
 
   const clientId = randomId('client');
-  ws.data = { clientId };
+  ws.data = { kind: 'control', clientId };
 
   const entry: ClientEntry = {
     id: clientId,
@@ -251,8 +474,15 @@ const server = Bun.serve<WsData>({
   port: config.httpPort,
   fetch(request, server) {
     const url = new URL(request.url);
-    if (url.pathname === config.wsPath && server.upgrade(request, { data: { clientId: null } })) {
+    if (
+      url.pathname === config.wsPath &&
+      server.upgrade(request, { data: { kind: 'control', clientId: null } })
+    ) {
       return;
+    }
+
+    if (isWebSocketUpgradeRequest(request)) {
+      return handleWebSocketUpgrade(request, server);
     }
 
     if (url.pathname === '/') {
@@ -266,7 +496,17 @@ const server = Bun.serve<WsData>({
     return handleHttpRequest(request);
   },
   websocket: {
+    open(ws) {
+      if (ws.data.kind === 'public') {
+        handlePublicWsOpen(ws);
+      }
+    },
     message(ws, rawMessage) {
+      if (ws.data.kind === 'public') {
+        handlePublicWsMessage(ws, rawMessage);
+        return;
+      }
+
       const text =
         typeof rawMessage === 'string' ? rawMessage : Buffer.from(rawMessage).toString('utf8');
       let message: ClientToServerMessage;
@@ -314,13 +554,24 @@ const server = Bun.serve<WsData>({
         case 'http_response_end':
           handleHttpResponseEnd(clientId, message);
           break;
+        case 'ws_frame':
+          handleWsFrame(clientId, message);
+          break;
+        case 'ws_close':
+          handleWsClose(clientId, message);
+          break;
         default:
           break;
       }
     },
-    close(ws) {
-      const clientId = ws.data?.clientId ?? null;
-      if (clientId) {
+    close(ws, code, reason) {
+      if (ws.data.kind === 'public') {
+        handlePublicWsClose(ws, code, reason);
+        return;
+      }
+
+      const clientId = ws.data.clientId;
+      if (clientId !== null) {
         cleanupClient(clientId);
         logInfo(`Client ${clientId} disconnected.`);
       }

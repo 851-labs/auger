@@ -31,6 +31,28 @@ export type HttpRequestMessage = {
   bodyBase64: string;
 };
 
+export type WsOpenMessage = {
+  type: 'ws_open';
+  id: string;
+  path: string;
+  headers: Record<string, string>;
+  protocols: string[];
+};
+
+export type WsFrameMessage = {
+  type: 'ws_frame';
+  id: string;
+  dataBase64: string;
+  isBinary: boolean;
+};
+
+export type WsCloseMessage = {
+  type: 'ws_close';
+  id: string;
+  code?: number;
+  reason?: string;
+};
+
 export type HttpResponseMessage = {
   type: 'http_response';
   id: string;
@@ -57,14 +79,22 @@ export type HttpResponseEndMessage = {
   id: string;
 };
 
-export type ServerToClientMessage = WelcomeMessage | ErrorMessage | HttpRequestMessage;
+export type ServerToClientMessage =
+  | WelcomeMessage
+  | ErrorMessage
+  | HttpRequestMessage
+  | WsOpenMessage
+  | WsFrameMessage
+  | WsCloseMessage;
 
 export type ClientToServerMessage =
   | HelloMessage
   | HttpResponseMessage
   | HttpResponseStartMessage
   | HttpResponseChunkMessage
-  | HttpResponseEndMessage;
+  | HttpResponseEndMessage
+  | WsFrameMessage
+  | WsCloseMessage;
 
 export type AnyMessage = ServerToClientMessage | ClientToServerMessage;
 
@@ -93,6 +123,12 @@ function assertNumber(value: unknown, field: string): asserts value is number {
   }
 }
 
+function assertBoolean(value: unknown, field: string): asserts value is boolean {
+  if (typeof value !== 'boolean') {
+    throw new Error(`Expected ${field} to be boolean`);
+  }
+}
+
 function assertHeaders(value: unknown): asserts value is Record<string, string> {
   if (!isRecord(value)) {
     throw new Error('Expected headers to be object');
@@ -100,6 +136,18 @@ function assertHeaders(value: unknown): asserts value is Record<string, string> 
   for (const [key, headerValue] of Object.entries(value)) {
     if (typeof key !== 'string' || typeof headerValue !== 'string') {
       throw new Error('Expected headers to be string map');
+    }
+  }
+}
+
+function assertStringArray(value: unknown, field: string): asserts value is string[] {
+  if (!Array.isArray(value)) {
+    throw new Error(`Expected ${field} to be array`);
+  }
+
+  for (const item of value) {
+    if (typeof item !== 'string') {
+      throw new Error(`Expected ${field} to contain only strings`);
     }
   }
 }
@@ -147,6 +195,26 @@ export function parseMessage(raw: string): AnyMessage {
       assertHeaders(parsed.headers);
       assertString(parsed.bodyBase64, 'bodyBase64');
       return parsed as HttpRequestMessage;
+    case 'ws_open':
+      assertString(parsed.id, 'id');
+      assertString(parsed.path, 'path');
+      assertHeaders(parsed.headers);
+      assertStringArray(parsed.protocols, 'protocols');
+      return parsed as WsOpenMessage;
+    case 'ws_frame':
+      assertString(parsed.id, 'id');
+      assertString(parsed.dataBase64, 'dataBase64');
+      assertBoolean(parsed.isBinary, 'isBinary');
+      return parsed as WsFrameMessage;
+    case 'ws_close':
+      assertString(parsed.id, 'id');
+      if (parsed.code !== undefined) {
+        assertNumber(parsed.code, 'code');
+      }
+      if (parsed.reason !== undefined) {
+        assertString(parsed.reason, 'reason');
+      }
+      return parsed as WsCloseMessage;
     case 'http_response':
       assertString(parsed.id, 'id');
       assertNumber(parsed.status, 'status');
